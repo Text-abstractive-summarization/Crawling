@@ -279,7 +279,7 @@ class Crawling(Topic):
 
     def query(self, query):
         url = super().query_url(query)
-        a = super().naver_news_crawling(url)
+        time, media_name, title, text = super().naver_news_crawling(url)
         
         politics_df = pd.DataFrame({'time':[time],'media':[media_name],'title':[title],'document':[text]})
         return politics_df
