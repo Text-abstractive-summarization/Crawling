@@ -144,6 +144,7 @@ class Topic:
 
         return selected_url
     # 선택된 헤드라인 페이지에서 신문사별로 링크 따오기
+    
     def compare_time(self,links):
         article_times = {} 
         for key, url in links.items():
@@ -243,6 +244,34 @@ class Topic:
 
         return time, media_name, title, text
 
+    def sport_news(self, url):
+        time_li = []; time_list= []
+        media_li = []; title_li = []
+        document_li = []
+
+        req = requests.get(url, headers=headers)
+        html = req.text
+        soup = BeautifulSoup(html, 'html.parser')
+        contents = soup.find_all(class_='today_item')
+        for content in contents[:4]:
+            link = url+content.find(class_='link_today')['href']  
+            req = requests.get(link, headers=headers)
+            html = req.text
+            soup = BeautifulSoup(html, 'html.parser')
+
+            time = soup.find(class_='info').text.split('최종수정')[1].split('기사원문')[0].strip() # time
+            time_li.append(time)
+            time = time.replace('오전','AM').replace('오후','PM')
+            time = datetime.strptime(time, '%Y.%m.%d. %p %I:%M') # datetime 으로 파싱
+            time_list.append(time) # 순서정렬용
+            media_li.append(content.find(class_='information').text.split('\n')[1]) # media
+            title_li.append(content.find(class_='title').text) # title
+            document_li.append(soup.find(id='newsEndContents').text.split('기사제공')[0].strip('\n')) # document
+        df = pd.DataFrame({'time_list':time_list,'time':time_li,'media':media_li,'title':title_li,'document':document_li})
+        df.sort_values(by='time_list',ascending=False,inplace=True) # (시간 기준) 최신 순으로 정렬
+        df.drop(['time_list'],axis=1,inplace=True) # 필요없는 컬럼 삭제
+        return df
+
 
 class Crawling(Topic):
     def __init__(self):
@@ -259,22 +288,31 @@ class Crawling(Topic):
             url = 'https://news.naver.com/main/main.naver?mode=LSD&mid=shm&sid1=102'
         elif topic == "생활/문화":
             url = 'https://news.naver.com/main/main.naver?mode=LSD&mid=shm&sid1=103'
+        elif topic == '스포츠':
+            url = 'https://sports.news.naver.com'
         else:
-            return print ('"경제", "정치", "사회", "생활/문화" 중에 골라주세요')
+            return print ('"경제", "정치", "사회", "생활/문화","스포츠" 중에 골라주세요')
 
-        final_links = super().choice_link(url,topic)
-        # 정치면 기사 dataframe
-        time = []
-        media = []
-        head = []
-        body = []
-        for name, link in final_links.items():
-            t, media_name, title, text = self.naver_news_crawling(link)
-            time.append(t); media.append(media_name)
-            head.append(title); body.append(text)
 
-        politics_df = pd.DataFrame({'time':time,'media':media,'title':head,'document':body})
-        return politics_df
+        if topic == '스포츠':
+            final_df = super().sport_news()
+
+
+        else:
+            final_links = super().choice_link(url,topic)
+
+            time = []
+            media = []
+            head = []
+            body = []
+            for name, link in final_links.items():
+                t, media_name, title, text = self.naver_news_crawling(link)
+                time.append(t); media.append(media_name)
+                head.append(title); body.append(text)
+
+            final_df = pd.DataFrame({'time':time,'media':media,'title':head,'document':body})
+        
+        return final_df
 
 
     def query(self, query):
