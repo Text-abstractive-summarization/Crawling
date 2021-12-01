@@ -9,7 +9,7 @@ from datetime import datetime
 
 class Topic:
     def __init__(self):
-        self.headers = {"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36"}
+        self.headers = {"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36"}
 
     def main_page(self, url,topic):
         # 모듈 import
@@ -220,28 +220,69 @@ class Topic:
             link.append(all_link[j]['href'])
         news_link = pd.DataFrame(link, columns = ['link'])
         naver_news_link = news_link[news_link['link'].str.contains('https://news.naver.com')]
-
+        
+        try:
+            naver_news_link.iloc[0,0]
+        except:
+            return None
+        
         return naver_news_link.iloc[0,0]
 
 
     def naver_news_crawling(self, url):
-
         req = requests.get(url,headers=self.headers)
-        html = req.text
-        soup = BeautifulSoup(html, 'html.parser')
-        media_name = soup.select_one('div.article_header > div.press_logo > a > img')['title']
-        time = soup.select_one('span.t11').text
-        try:
-            title = soup.find(id= 'articleTitle').text
+        if re.search('https://sports.news.naver.com/',req.url):
+            time, media_name, title, text = self.sport_contents(url)
             
-            text = soup.find(id = 'articleBodyContents').text
-            text = text.split('_flash_removeCallback() {}\n\n')[-1]
-            
-            
-        except:
-            pass
+        elif re.search('https://entertain.naver.com/',req.url):
+            time, media_name, title, text = self.entertain_contents(url)
+            print (1)
+        
+        else:
+            try:
+                html = req.text
+                soup = BeautifulSoup(html, 'html.parser')   
+                title = soup.find(id= 'articleTitle').text
+                
+                text = soup.find(id = 'articleBodyContents').text
+                text = text.split('_flash_removeCallback() {}\n\n')[-1]
+                
+                media_name = soup.select_one('div.article_header > div.press_logo > a > img')['title']
+                time = soup.select_one('span.t11').text
+                
+            except:
+                pass
 
         return time, media_name, title, text
+        
+    def sport_contents(self, url):
+        req = requests.get(url, headers=self.headers)
+        html = req.text
+        soup = BeautifulSoup(html, 'html.parser')
+
+        time = soup.find(class_='info').text.split('최종수정')[1].split('기사원문')[0].strip() # time
+        time = time.replace('오전','AM').replace('오후','PM')
+        time = datetime.strptime(time, '%Y.%m.%d. %p %I:%M') # datetime 으로 파싱
+        title = soup.find(class_='title').text
+        text = soup.find(id='newsEndContents').text.split('기사제공')[0].strip('\n')
+        media = media_name = soup.select_one('#pressLogo > a > img')['alt']
+        
+        return time, media, title, text
+        
+    def entertain_contents(self, url):
+        req = requests.get(url, headers=self.headers)
+        html = req.text
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        time = soup.select_one('#content > div.end_ct > div > div.article_info > span > em').text.strip() # time
+        time = time.replace('오전','AM').replace('오후','PM')
+        
+        media_name = soup.select_one('#content > div.end_ct > div > div.press_logo > a > img')['alt']
+        title = soup.select_one('h2').text
+        text = soup.select_one('#articeBody').text
+        
+        return time, media_name, title, text
+        
 
     def sport_news(self, url):
         
@@ -255,18 +296,15 @@ class Topic:
         contents = soup.find_all(class_='today_item')
         for content in contents[:4]:
             link = url+content.find(class_='link_today')['href']  
-            req = requests.get(link, headers=self.headers)
-            html = req.text
-            soup = BeautifulSoup(html, 'html.parser')
-
-            time = soup.find(class_='info').text.split('최종수정')[1].split('기사원문')[0].strip() # time
+            
+            time, media, title, text = self.sport_contents(link)
+            
             time_li.append(time)
-            time = time.replace('오전','AM').replace('오후','PM')
-            time = datetime.strptime(time, '%Y.%m.%d. %p %I:%M') # datetime 으로 파싱
             time_list.append(time) # 순서정렬용
-            media_li.append(content.find(class_='information').text.split('\n')[1]) # media
-            title_li.append(content.find(class_='title').text) # title
-            document_li.append(soup.find(id='newsEndContents').text.split('기사제공')[0].strip('\n')) # document
+            media_li.append(media) # media
+            title_li.append(title) # title
+            document_li.append(text)
+
         df = pd.DataFrame({'time_list':time_list,'time':time_li,'media':media_li,'title':title_li,'document':document_li})
         df.sort_values(by='time_list',ascending=False,inplace=True) # (시간 기준) 최신 순으로 정렬
         df.drop(['time_list'],axis=1,inplace=True) # 필요없는 컬럼 삭제
@@ -311,15 +349,26 @@ class Crawling(Topic):
                 head.append(title); body.append(text)
 
             final_df = pd.DataFrame({'time':time,'media':media,'title':head,'document':body})
-        
+            final_df.document = final_df.document.apply(lambda x: re.sub('\n','',x))
+            final_df.document = final_df.document.apply(lambda x: re.sub('\t','',x))
         return final_df
 
 
     def query(self, query):
         url = super().query_url(query)
-        time, media_name, title, text = super().naver_news_crawling(url)
-        
-        politics_df = pd.DataFrame({'time':[time],'media':[media_name],'title':[title],'document':[text]})
-        return politics_df
+        if url:
+            time, media_name, title, text = super().naver_news_crawling(url)
+            
+            final_df = pd.DataFrame({'time':[time],'media':[media_name],'title':[title],'document':[text]})
+            final_df.document = final_df.document.apply(lambda x: re.sub('\n','',x))
+            final_df.document = final_df.document.apply(lambda x: re.sub('\t','',x))
+            return final_df
+        else:
+            return None
 
-    
+    def choice_url(self,url):
+        time, media, title, text = self.naver_news_crawling(url)
+        final_df = pd.DataFrame({'time':[time],'media':[media],'title':[title],'document':[text]})
+        final_df.document = final_df.document.apply(lambda x: re.sub('\n','',x))
+        final_df.document = final_df.document.apply(lambda x: re.sub('\t','',x))
+        return final_df
