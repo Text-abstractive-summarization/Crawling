@@ -8,6 +8,8 @@ from datetime import datetime
 
 
 class Topic:
+    def __init__(self):
+        self.headers = {"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36"}
 
     def main_page(self, url,topic):
         # 모듈 import
@@ -16,9 +18,8 @@ class Topic:
         from datetime import datetime
         
         # 정치면 메인 페이지 요청 -> html로 파싱
-        global headers
-        headers = {"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36"}
-        req = requests.get(url, headers = headers)
+        
+        req = requests.get(url, headers = self.headers)
         target = BeautifulSoup(req.content, 'html.parser')
 
         url_main = 'https://news.naver.com/'
@@ -40,7 +41,7 @@ class Topic:
                 news_num = np.nan
 
             # 헤드라인 서브 페이지 요청 -> html로 파싱
-            sub_req = requests.get(each_url, headers = headers)
+            sub_req = requests.get(each_url, headers = self.headers)
             page = BeautifulSoup(sub_req.content, 'html.parser')
 
             # 헤드라인 서브 페이지에서 가장 첫번째 기사 제목 (편의상 넣음 꼭 필요한 것은 아님)
@@ -148,7 +149,7 @@ class Topic:
     def compare_time(self,links):
         article_times = {} 
         for key, url in links.items():
-            req = requests.get(url, headers = headers)
+            req = requests.get(url, headers = self.headers)
             target = BeautifulSoup(req.content, 'html.parser')
             time = target.select('span.t11')[-1].text # 기사 입력 시간 추출 (최초 작성 후 수정본이 있을때 수정된 시간으로 추출 / 만약 최초 작성 시간 기준을 하고 싶으면 인덱스[0]) 
             time = time.replace('오후', 'PM').replace('오전', 'AM') # 오후 -> PM, 오전 -> AM 변경
@@ -168,7 +169,7 @@ class Topic:
         from datetime import datetime
         
         selected_url = self.choice_title(url,topic)
-        req = requests.get(selected_url, headers = headers)
+        req = requests.get(selected_url, headers = self.headers)
         target = BeautifulSoup(req.content, 'html.parser')
 
         con_link1 = {} # 보수 언론사 1
@@ -225,9 +226,7 @@ class Topic:
 
     def naver_news_crawling(self, url):
 
-        headers = {"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36"}
-        
-        req = requests.get(url,headers=headers)
+        req = requests.get(url,headers=self.headers)
         html = req.text
         soup = BeautifulSoup(html, 'html.parser')
         media_name = soup.select_one('div.article_header > div.press_logo > a > img')['title']
@@ -245,17 +244,18 @@ class Topic:
         return time, media_name, title, text
 
     def sport_news(self, url):
+        
         time_li = []; time_list= []
         media_li = []; title_li = []
         document_li = []
 
-        req = requests.get(url, headers=headers)
+        req = requests.get(url, headers=self.headers)
         html = req.text
         soup = BeautifulSoup(html, 'html.parser')
         contents = soup.find_all(class_='today_item')
         for content in contents[:4]:
             link = url+content.find(class_='link_today')['href']  
-            req = requests.get(link, headers=headers)
+            req = requests.get(link, headers=self.headers)
             html = req.text
             soup = BeautifulSoup(html, 'html.parser')
 
@@ -295,7 +295,7 @@ class Crawling(Topic):
 
 
         if topic == '스포츠':
-            final_df = super().sport_news()
+            final_df = super().sport_news(url)
 
 
         else:
